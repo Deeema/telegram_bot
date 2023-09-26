@@ -1,22 +1,29 @@
-import { readFileContent } from "./readFileContent.js";
-import { parseFileContent } from "./parseFileContent.js";
-import { createArrayOfObjects } from "./createArrayOfObjects.js";
-import { sortArrayOfObjectsByDate } from "./sortArrayOfObjectsByDate.js";
-import { sendMessages } from "./sendMessages.js";
+import { readFileContent } from "./src/readFileContent.js";
+import { parseFileContent } from "./src/parseFileContent.js";
+import { createArrayOfObjects } from "./src/createArrayOfObjects.js";
+import { sortArrayOfObjectsByDate } from "./src/sortArrayOfObjectsByDate.js";
+import { sendMessages } from "./src/sendMessages.js";
+import { watchFile } from "./src/watchFile.js";
 import TelegramBot from 'node-telegram-bot-api';
+import 'dotenv/config'
+import cron from 'node-cron';
 
-const token = '6598623475:AAEmdP5Qpz601hRaFku1k4CYMZ3XDkHx5zU'; // Replace with your Telegram bot token
-const chatId = '417249119'; // Replace with your chat ID or the chat ID of the recipient
-
-const bot = new TelegramBot(token, { polling: false });
-const filePath = 'Telegram.txt'; // Replace with your file
+const bot = new TelegramBot(process.env.TOKEN, { polling: false });
+const filePath = 'Telegram2.txt'; // Replace with your file
 const content = readFileContent(filePath);
 const lines = parseFileContent(content);
 // prefix for station
-const prefix = 'PS-';
+const prefix = 'ГРП';
 const objects = createArrayOfObjects(lines, prefix);
 const sortedArray = sortArrayOfObjectsByDate(objects);
 
-sendMessages(bot, chatId, sortedArray);
+const runTask = () => {
+    console.log('Running your task...');
+    // Put your task logic here 
+    sendMessages(bot, process.env.CHAT_ID, sortedArray);
+  };
+  
+  // Watch for file changes and run the task
+watchFile(filePath, runTask);
 
-// console.log("content", sortedArray);
+// console.log("ENV", process.env);

@@ -47,11 +47,14 @@ sortedArray.forEach(element => {
 });
 
 // Update the flags and save them
+// 
+// Update the flags and save them
 sortedArray.forEach(element => {
   const sensorName = element.name;
 
   if (!element.sent) {
-    bot.sendMessage(chatId, `${element.name} \n${element.date} \n${element.data}`);
+    const formattedData = element.data.join('\n');  // Format data to string with new lines
+    bot.sendMessage(chatId, `${element.name} \n${element.date} \n${formattedData}`);
     element.sent = true;  // Update the sent flag
 
     // Create flags for each date if not already present
