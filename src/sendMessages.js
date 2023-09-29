@@ -29,7 +29,8 @@ let flags = loadFlags('flags.json');
 // Update sortedArray with flags from flags.json
 sortedArray.forEach(element => {
   const sensorName = element.name;
-
+  
+  // bot.sendMessage(chatId, "Hi");
   // Check if the sensor has flags
   if (flags[sensorName]) {
     const dates = Object.keys(flags[sensorName]);
@@ -37,7 +38,6 @@ sortedArray.forEach(element => {
     // Update flags for each date in sortedArray
     dates.forEach(date => {
       const foundDateIndex = sortedArray.findIndex(item => item.name === sensorName && item.date === date);
-
       if (foundDateIndex !== -1) {
         sortedArray[foundDateIndex].sent = flags[sensorName][date].sent;
         sortedArray[foundDateIndex].read = flags[sensorName][date].read;
@@ -46,12 +46,11 @@ sortedArray.forEach(element => {
   }
 });
 
-// Update the flags and save them
-// 
+// console.log("sortedArray=", sortedArray);
 // Update the flags and save them
 sortedArray.forEach(element => {
   const sensorName = element.name;
-
+  console.log(element.date, element.sent);
   if (!element.sent) {
     const formattedData = element.data.join('\n');  // Format data to string with new lines
     bot.sendMessage(chatId, `${element.name} \n${element.date} \n${formattedData}`);
