@@ -9,18 +9,23 @@ import 'dotenv/config'
 import cron from 'node-cron';
 
 const bot = new TelegramBot(process.env.TOKEN, { polling: false });
+const fileDirectory = process.env.FILE_DIRECTORY;
 const filePath = 'Telegram270923.txt'; // Replace with your file
 
 // Function to run the task
 const runTask = () => {
     console.log('Running your task...');
+    // TODO - change flags to dateresponse
+    const latestFile = getLatestFileByDate(fileDirectory);
     // Put your task logic here 
-    const content = readFileContent(filePath);
-    const lines = parseFileContent(content);
-    const prefix = 'ГРП';
-    const objects = createArrayOfObjects(lines, prefix);
-    const sortedArray = sortArrayOfObjectsByDate(objects);
-    sendMessages(bot, process.env.CHAT_ID, sortedArray);
+    if (latestFile) {
+        const content = readFileContent(latestFile);
+        const lines = parseFileContent(content);
+        const prefix = 'ГРП';
+        const objects = createArrayOfObjects(lines, prefix);
+        const sortedArray = sortArrayOfObjectsByDate(objects);
+        sendMessages(bot, process.env.CHAT_ID, sortedArray);
+    }
 };
 
 let count = 0;
