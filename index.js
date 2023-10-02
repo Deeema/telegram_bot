@@ -21,7 +21,7 @@ const runTask = () => {
     if (latestFile) {
         const content = readFileContent(latestFile);
         const lines = parseFileContent(content);
-        const prefix = 'ГРП';
+        const prefix = process.env.PREFIX;
         const objects = createArrayOfObjects(lines, prefix);
         const sortedArray = sortArrayOfObjectsByDate(objects);
         sendMessages(bot, process.env.CHAT_ID, sortedArray);
