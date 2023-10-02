@@ -3,12 +3,12 @@ const createArrayOfObjects = (lines, prefix) => {
     let currentIndex = 0;
   
     while (currentIndex < lines.length) {
-      const currentSensor = lines[currentIndex];
-      const date = lines[currentIndex + 1];
+      const currentSensor = lines[currentIndex + 1];
+      const date = lines[currentIndex + 3];
       const data = [];
   
       // Start from currentIndex + 3 to collect data
-      let dataIndex = currentIndex + 2;
+      let dataIndex = currentIndex + 4;
       while (dataIndex < lines.length && !lines[dataIndex].includes(`${prefix}`)) {
         // Push and format data for new string
         data.push(lines[dataIndex].replace('\r', '\n'));
