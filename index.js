@@ -5,6 +5,7 @@ import { sortArrayOfObjectsByDate } from "./src/sortArrayOfObjectsByDate.js";
 import { sendMessages } from "./src/sendMessages.js";
 import { watchFile } from "./src/watchFile.js";
 import getLatestFileByDate from "./src/getLatestFileByDate.js"
+import { convertToUTF8, convertFromBuf } from "./src/convertToUTF8.js"
 import TelegramBot from 'node-telegram-bot-api';
 import 'dotenv/config'
 import cron from 'node-cron';
@@ -26,7 +27,7 @@ const runTask = () => {
         const prefix = process.env.PREFIX;
         const objects = createArrayOfObjects(lines, prefix);
         const sortedArray = sortArrayOfObjectsByDate(objects);
-        sendMessages(bot, process.env.CHAT_ID, sortedArray);
+        // sendMessages(bot, process.env.CHAT_ID, sortedArray);
     }
 };
 
@@ -38,6 +39,7 @@ cron.schedule('*/1 * * * *', () => {
     console.log(`Running a task every 2 minutes. Date ${new Date()} ${count}`);
     // runTask();
     // Watch for file changes and run the task
+    convertFromBuf();
     watchFile(filePath, runTask);
 });
 
