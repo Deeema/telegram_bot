@@ -1,0 +1,2 @@
+ALTER TABLE Events
+ADD COLUMN message_sent INTEGER DEFAULT 0;
