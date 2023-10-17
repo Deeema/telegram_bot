@@ -3,9 +3,9 @@ import { sendTelegramMessage } from './src/sendTelegramMessage.js';
 import { getColumnNames } from './src/db/getColumnNames.js';
 import db from './src/db/database.js';
 
-const insertEventRecord = (messageId, censorId, censor_time, successful) => {
-  const insertQuery = 'INSERT INTO Events (message_id, censor_id, censor_time, successful) VALUES (?, ?, ?, ?)';
-  const values = [messageId, censorId, censor_time, successful ? 1 : 0];
+const insertEventRecord = (messageId, censorId, censor_time, successful, message_sent) => {
+  const insertQuery = 'INSERT INTO Events (message_id, censor_id, censor_time, successful, message_sent) VALUES (?, ?, ?, ?, ?)';
+  const values = [messageId, censorId, censor_time, successful ? 1 : 0, message_sent];
 
   db.run(insertQuery, values, function (err) {
     if (err) {
@@ -16,21 +16,7 @@ const insertEventRecord = (messageId, censorId, censor_time, successful) => {
   });
 };
 
-const getColumnValuesForSpecificRow = (tableName, rowId, columnNames) => {
-  const query = `SELECT ${columnNames.join(', ')} FROM ${tableName} WHERE TabNo = ?`;
-
-  return new Promise((resolve, reject) => {
-    db.get(query, [rowId], (err, row) => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve(row);
-      }
-    });
-  });
-};
-
-const sendColumnValuesToTelegram = async (tableName, excludedColumns) => {
+const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId) => {
   try {
     const columnNames = await getColumnNames(tableName);
 
@@ -40,9 +26,7 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns) => {
 
     const includedColumns = columnNames.filter(column => !excludedColumns.includes(column));
 
-    console.log("includedColumns", includedColumns)
-
-    const query = `SELECT ROWID, ${includedColumns.join(', ')} FROM ${tableName} WHERE ROWID > (SELECT MAX(ROWID) FROM Events WHERE message_sent = 1)`;
+    const query = `SELECT ROWID, ${includedColumns.join(', ')} FROM ${tableName} WHERE ROWID > (SELECT MAX(ROWID) FROM events WHERE message_sent = 1)`;
 
     db.get(query, [], async (err, row) => {
       if (err) {
@@ -50,9 +34,6 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns) => {
       } else if (row) {
         const message = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
         await sendTelegramMessage(message);
-
-        // Mark the message as sent in the events table
-        db.run('INSERT INTO Events (message_sent) VALUES (1)');
 
         console.log('Message sent successfully.');
       } else {
@@ -72,16 +53,15 @@ const excludedColumns = ['BitSetup', 'FlP_1', 'FlP_2'];  // Specify the columns 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach(censorRecord => {
     const parent_id = censorRecord.TabNo;
+    const rowId = censorRecord.TabNo;
     const censorId = censorRecord.Identifier;
     const censor_time = censorRecord.TimerOut;
     const successful = true;
-    console.log("newCensorRecords.length < parent_id", newCensorRecords.length, parent_id)
+    const message_sent = 1;
 
     if (newCensorRecords.length <= parent_id) {
-      insertEventRecord(parent_id, censorId, censor_time, successful);
-      const message = `New event: Message ID ${parent_id}, Censor ID ${censorId}, Successful: ${successful ? 'Yes' : 'No'}`;
-
-      sendColumnValuesToTelegram(tableName, excludedColumns);
+      sendColumnValuesToTelegram(tableName, excludedColumns, rowId);
+      insertEventRecord(parent_id, censorId, censor_time, successful, message_sent);
     }
   });
 });
