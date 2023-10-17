@@ -53,7 +53,6 @@ const excludedColumns = ['BitSetup', 'FlP_1', 'FlP_2'];  // Specify the columns 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach(censorRecord => {
     const parent_id = censorRecord.TabNo;
-    const rowId = censorRecord.TabNo;
     const censorId = censorRecord.Identifier;
     const censor_time = censorRecord.TimerOut;
     const successful = true;
