@@ -27,12 +27,14 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
     const includedColumns = columnNames.filter(column => !excludedColumns.includes(column));
 
     // const query = `SELECT ROWID, ${includedColumns.join(', ')} FROM ${tableName} WHERE ROWID > (SELECT MAX(ROWID) FROM events WHERE message_sent = 0)`;
+    // const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
+
     const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
 
     const query = `
       SELECT ROWID, ${includedColumns.join(', ')}
       FROM ${tableName}
-      WHERE ROWID > 5406
+      WHERE TabNo >= (${maxMessageIdQuery})
     `;
 
     db.get(query, [], async (err, row) => {
