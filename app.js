@@ -57,8 +57,8 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
 };
 
 // Example usage
-const tableName = 'TableDataGRP';
-const excludedColumns = ['BitSetup', 'FlP_1', 'FlP_2'];  // Specify the columns to be excluded
+const tableName = process.env.TABLE_NAME;
+const excludedColumns = process.env.EXCLUDED_COLUMNS.split(',');  // Specify the columns to be excluded
 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach(censorRecord => {
