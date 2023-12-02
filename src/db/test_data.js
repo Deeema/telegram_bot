@@ -1,11 +1,11 @@
 import { exec } from 'child_process';
-import schedule from 'node-schedule';
+import cron from 'node-cron';
 
 // Define the SQL script to execute
 const sqlScript = 'insert_censor_row.sql'; // Replace with the actual filename
 
-// Create a schedule to run the SQL script every 2 minutes
-const job = schedule.scheduleJob('*/2 * * * *', () => {
+// Create a cron job to run the SQL script every 2 minutes
+cron.schedule('*/2 * * * *', () => {
   const cmd = `sqlite3 your_database.db < ${sqlScript}`; // Replace 'your_database.db' with your database file
   exec(cmd, (error, stdout, stderr) => {
     if (error) {

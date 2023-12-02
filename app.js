@@ -16,9 +16,26 @@ const insertEventRecord = (messageId, censorId, censor_time, successful, message
   });
 };
 
+// Function to get information about the device from TableDevise
+const getDeviceInfo = async (Identifier) => {
+  console.log("Identifier", Identifier)
+  const query = 'SELECT Name, Addres FROM TableDevise WHERE Identifier = ?';
+  return new Promise((resolve, reject) => {
+    db.get(query, [Identifier], (err, row) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(row);
+      }
+    });
+  });
+};
+
+
 const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, callback) => {
   try {
     const columnNames = await getColumnNames(tableName);
+    let deviceInfo = await getDeviceInfo(rowId.Identifier);
 
     if (!columnNames.length) {
       throw new Error('No columns found for the specified table.');
@@ -34,15 +51,25 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
     const query = `
       SELECT ROWID, ${includedColumns.join(', ')}
       FROM ${tableName}
-      WHERE TabNo >= (${maxMessageIdQuery})
+      WHERE Id >= (${maxMessageIdQuery})
     `;
 
     db.get(query, [], async (err, row) => {
       if (err) {
         console.error('Error retrieving row:', err);
       } else if (row) {
-        const message = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
-        await sendTelegramMessage(message);
+        // Get information about the device from TableDevise
+        const deviceInfo = await getDeviceInfo(row.Identifier);
+
+        console.log("deviceInfo", deviceInfo);
+
+        // Prepare the message with information about the device and other details
+        const messageHeader = `\*\*Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}\*\*`;
+        const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
+
+        // Combine the header and body for the full message
+        const fullMessage = `${messageHeader}\n${messageBody}`;
+        await sendTelegramMessage(fullMessage);
 
         console.log('Message sent successfully.');
         // Call the callback after sending the message
@@ -62,7 +89,7 @@ const excludedColumns = process.env.EXCLUDED_COLUMNS.split(',');  // Specify the
 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach(censorRecord => {
-    const rowId = censorRecord.TabNo;  // Use a single variable for the rowId
+    const rowId = censorRecord.Id;  // Use a single variable for the rowId
     const censorId = censorRecord.Identifier;
     const censorTime = censorRecord.TimerOut;
     const successful = true;

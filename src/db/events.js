@@ -15,7 +15,7 @@ const watchForNewCensorRecords = (callback) => {
       }
 
       if (rows.length > 0) {        
-        lastProcessedCensorId = rows[rows.length - 1].TabNo;
+        lastProcessedCensorId = rows[rows.length - 1].Id;
         // console.log("Rowid", rows[0], rows.length, lastProcessedCensorId);
         callback(rows);
       }
