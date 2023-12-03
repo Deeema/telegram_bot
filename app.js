@@ -60,11 +60,12 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
       } else if (row) {
         // Get information about the device from TableDevise
         const deviceInfo = await getDeviceInfo(row.Identifier);
+        const deviceError = row.SensorError || row.BitError;     
 
-        console.log("deviceInfo", deviceInfo);
+        console.log("deviceInfo", deviceError);
 
         // Prepare the message with information about the device and other details
-        const messageHeader = `\*\*Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}\*\*`;
+        const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
         const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
 
         // Combine the header and body for the full message
