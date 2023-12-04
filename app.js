@@ -3,6 +3,9 @@ import { sendTelegramMessage } from './src/sendTelegramMessage.js';
 import { getColumnNames } from './src/db/getColumnNames.js';
 import db from './src/db/database.js';
 
+import dotenv from 'dotenv';
+dotenv.config();
+
 const insertEventRecord = (messageId, censorId, censor_time, successful, message_sent) => {
   const insertQuery = 'INSERT INTO Events (message_id, censor_id, censor_time, successful, message_sent) VALUES (?, ?, ?, ?, ?)';
   const values = [messageId, censorId, censor_time, successful ? 1 : 0, message_sent];
@@ -16,9 +19,7 @@ const insertEventRecord = (messageId, censorId, censor_time, successful, message
   });
 };
 
-// Function to get information about the device from TableDevise
 const getDeviceInfo = async (Identifier) => {
-  console.log("getDeviceInfo Identifier", Identifier)
   const query = 'SELECT Name, Addres FROM TableDevise WHERE Identifier = ?';
   return new Promise((resolve, reject) => {
     db.get(query, [Identifier], (err, row) => {
@@ -31,24 +32,20 @@ const getDeviceInfo = async (Identifier) => {
   });
 };
 
-
 const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, callback) => {
   try {
     const columnNames = await getColumnNames(tableName);
-   
+
     if (!columnNames.length) {
       throw new Error('No columns found for the specified table.');
     }
 
     const includedColumns = columnNames.filter(column => !excludedColumns.includes(column));
 
-    // const query = `SELECT ROWID, ${includedColumns.join(', ')} FROM ${tableName} WHERE ROWID > (SELECT MAX(ROWID) FROM events WHERE message_sent = 0)`;
-    // const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
-
     const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
 
     const query = `
-      SELECT ROWID, ${includedColumns.join(', ')}
+      SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(', ')}
       FROM ${tableName}
       WHERE Id >= (${maxMessageIdQuery})
     `;
@@ -57,23 +54,19 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
       if (err) {
         console.error('Error retrieving row:', err);
       } else if (row) {
-        // Get information about the device from TableDevise
         const deviceInfo = await getDeviceInfo(row.Identifier);
-        const deviceError = Boolean(row.SensorError || row.BitError);     
+        const deviceError = Boolean(row.SensorError || row.BitError);
 
         console.log("deviceInfo", deviceError);
-        // Check conditions for sending the message
-        if (row.SensorError !== 0 || row.BitError !== 0) {  
-          // Prepare the message with information about the device and other details
-          const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
-          const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
 
-          // Combine the header and body for the full message
+        if (deviceError) {
+          const messageHeader = `⚠️<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+          const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
           const fullMessage = `${messageHeader}\n${messageBody}`;
+
           await sendTelegramMessage(fullMessage);
 
           console.log('Message sent successfully.');
-          // Call the callback after sending the message
           callback(rowId);
         } else {
           console.log('No alert rows to send.');
@@ -87,13 +80,12 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
   }
 };
 
-// Example usage
 const tableName = process.env.TABLE_NAME;
-const excludedColumns = process.env.EXCLUDED_COLUMNS.split(',');  // Specify the columns to be excluded
+const excludedColumns = process.env.EXCLUDED_COLUMNS.split(',');
 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach(censorRecord => {
-    const rowId = censorRecord.Id;  // Use a single variable for the rowId
+    const rowId = censorRecord.Id;
     const censorId = censorRecord.Identifier;
     const censorTime = censorRecord.TimerOut;
     const successful = true;
