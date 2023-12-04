@@ -18,7 +18,7 @@ const insertEventRecord = (messageId, censorId, censor_time, successful, message
 
 // Function to get information about the device from TableDevise
 const getDeviceInfo = async (Identifier) => {
-  console.log("Identifier", Identifier)
+  console.log("getDeviceInfo Identifier", Identifier)
   const query = 'SELECT Name, Addres FROM TableDevise WHERE Identifier = ?';
   return new Promise((resolve, reject) => {
     db.get(query, [Identifier], (err, row) => {
@@ -35,8 +35,7 @@ const getDeviceInfo = async (Identifier) => {
 const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, callback) => {
   try {
     const columnNames = await getColumnNames(tableName);
-    let deviceInfo = await getDeviceInfo(rowId.Identifier);
-
+   
     if (!columnNames.length) {
       throw new Error('No columns found for the specified table.');
     }
@@ -60,23 +59,27 @@ const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, cal
       } else if (row) {
         // Get information about the device from TableDevise
         const deviceInfo = await getDeviceInfo(row.Identifier);
-        const deviceError = row.SensorError || row.BitError;     
+        const deviceError = Boolean(row.SensorError || row.BitError);     
 
         console.log("deviceInfo", deviceError);
+        // Check conditions for sending the message
+        if (row.SensorError !== 0 || row.BitError !== 0) {  
+          // Prepare the message with information about the device and other details
+          const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+          const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
 
-        // Prepare the message with information about the device and other details
-        const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
-        const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
+          // Combine the header and body for the full message
+          const fullMessage = `${messageHeader}\n${messageBody}`;
+          await sendTelegramMessage(fullMessage);
 
-        // Combine the header and body for the full message
-        const fullMessage = `${messageHeader}\n${messageBody}`;
-        await sendTelegramMessage(fullMessage);
-
-        console.log('Message sent successfully.');
-        // Call the callback after sending the message
-        callback(rowId);
+          console.log('Message sent successfully.');
+          // Call the callback after sending the message
+          callback(rowId);
+        } else {
+          console.log('No alert rows to send.');
+        }
       } else {
-        console.log('No new rows to send.', row);
+        console.log('No new rows to send.');
       }
     });
   } catch (error) {
