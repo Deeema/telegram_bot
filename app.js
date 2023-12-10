@@ -2,9 +2,14 @@ import { watchForNewCensorRecords } from "./src/db/events.js";
 import { sendTelegramMessage } from "./src/sendTelegramMessage.js";
 import { getColumnNames } from "./src/db/getColumnNames.js";
 import db from "./src/db/database.js";
-
 import dotenv from "dotenv";
+
 dotenv.config();
+
+const tableName = process.env.TABLE_NAME;
+const excludedColumns = process.env.EXCLUDED_COLUMNS.split(",");
+
+let lastAlertSentTime = null;
 
 const insertEventRecord = (
   messageId,
@@ -88,6 +93,7 @@ const sendColumnValuesToTelegram = async (
           console.log("deviceInfo", deviceError);
 
           if (deviceError) {
+            lastAlertSentTime = new Date(); // Update last alert sent time
             const messageHeader = `⚠️<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
             const messageBody = includedColumns
               .map((column) => `${column}: ${row[column]}`)
@@ -100,6 +106,16 @@ const sendColumnValuesToTelegram = async (
             callback(rowId);
           } else {
             console.log("No alert rows to send.");
+            // Check if 3 hours have passed since the last alert
+            if (
+              lastAlertSentTime &&
+              new Date() - lastAlertSentTime >= intervalTime * 60 * 60 * 1000
+            ) {
+              console.log("Sending last normal message after 3 hours.");
+              // Send the last normal message
+              sendLastNormalMessage();
+              lastAlertSentTime = null; // Reset last alert sent time
+            }
           }
         } else {
           console.log("No new rows to send.");
@@ -111,8 +127,42 @@ const sendColumnValuesToTelegram = async (
   }
 };
 
-const tableName = process.env.TABLE_NAME;
-const excludedColumns = process.env.EXCLUDED_COLUMNS.split(",");
+const sendLastNormalMessage = async () => {
+  // Query the last normal message
+  const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
+  const query = `
+    SELECT ROWID, ${includedColumns.join(', ')}
+    FROM ${tableName}
+    WHERE Id >= (${maxMessageIdQuery})
+  `;
+
+  db.get(query, [], async (err, row) => {
+    if (err) {
+      console.error('Error retrieving last normal message:', err);
+    } else if (row) {
+      // Get information about the device from TableDevise
+      const deviceInfo = await getDeviceInfo(row.Identifier);
+
+      const columnNames = await getColumnNames(tableName);
+
+      const includedColumns = columnNames.filter(
+        (column) => !excludedColumns.includes(column)
+      );
+
+      // Prepare the message with information about the device and other details
+      const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+      const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
+
+      // Combine the header and body for the full message
+      const fullMessage = `${messageHeader}\n${messageBody}`;
+      await sendTelegramMessage(fullMessage);
+
+      console.log('Last normal message sent successfully.');
+    } else {
+      console.log('No last normal message to send.');
+    }
+  });
+};
 
 watchForNewCensorRecords((newCensorRecords) => {
   newCensorRecords.forEach((censorRecord) => {
