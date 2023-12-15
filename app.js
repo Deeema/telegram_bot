@@ -7,6 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const tableName = process.env.TABLE_NAME;
+const intervalTime = process.env.INTERVAL_TIME;
 const excludedColumns = process.env.EXCLUDED_COLUMNS.split(",");
 
 let lastAlertSentTime = null;
@@ -70,12 +71,20 @@ const sendColumnValuesToTelegram = async (
     const maxMessageIdQuery =
       "SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0";
 
-    // Read the interval time from the environment variable
-    const intervalTime = process.env.INTERVAL_TIME || 3; // Default to 3 hours
+    // Use a promise to get the result of the query
+    const maxMessageIdResult = await new Promise((resolve, reject) => {
+      db.get(maxMessageIdQuery, [], (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(result);
+        }
+      });
+    });
 
-    // Use setInterval to check for new rows and send a message every specified interval (in milliseconds)
-    setInterval(async () => {
-      const query = `
+    console.log("maxMessageIdResult:", maxMessageIdResult);
+
+    const query = `
       SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(
         ", "
       )}
@@ -83,45 +92,51 @@ const sendColumnValuesToTelegram = async (
       WHERE Id >= (${maxMessageIdQuery})
     `;
 
+    // Check for new rows every 5 minutes
+    setInterval(async () => {
+      const query = `
+        SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(', ')}
+        FROM ${tableName}
+        WHERE Id >= (${maxMessageIdQuery})
+      `;
+    
       db.get(query, [], async (err, row) => {
         if (err) {
-          console.error("Error retrieving row:", err);
+          console.error('Error retrieving row:', err);
         } else if (row) {
           const deviceInfo = await getDeviceInfo(row.Identifier);
           const deviceError = Boolean(row.SensorError || row.BitError);
-
+    
           console.log("deviceInfo", deviceError);
-
+    
           if (deviceError) {
             lastAlertSentTime = new Date(); // Update last alert sent time
             const messageHeader = `⚠️<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
             const messageBody = includedColumns
-              .map((column) => `${column}: ${row[column]}`)
-              .join("\n");
+              .map(column => `${column}: ${row[column]}`)
+              .join('\n');
             const fullMessage = `${messageHeader}\n${messageBody}`;
-
+    
             await sendTelegramMessage(fullMessage);
-
+    
             console.log("Message sent successfully.");
             callback(rowId);
           } else {
             console.log("No alert rows to send.");
-            // Check if 3 hours have passed since the last alert
-            if (
-              lastAlertSentTime &&
-              new Date() - lastAlertSentTime >= intervalTime * 60 * 60 * 1000
-            ) {
-              console.log("Sending last normal message after 3 hours.");
-              // Send the last normal message
-              sendLastNormalMessage();
-              lastAlertSentTime = null; // Reset last alert sent time
-            }
           }
         } else {
           console.log("No new rows to send.");
+    
+          // Check if 3 hours have passed since the last alert
+          if (lastAlertSentTime && new Date() - lastAlertSentTime >= intervalTime * 60 * 60 * 1000) {
+            console.log("Sending last normal message after 3 hours.");
+            // Send the last normal message
+            sendLastNormalMessage();
+            lastAlertSentTime = null; // Reset last alert sent time
+          }
         }
       });
-    }, intervalTime * 60 * 60 * 1000); // Convert interval time to milliseconds
+    }, intervalTime * 60 * 1000); // Convert interval time to milliseconds
   } catch (error) {
     console.error("Error sending column values to Telegram:", error);
   }
@@ -129,39 +144,45 @@ const sendColumnValuesToTelegram = async (
 
 const sendLastNormalMessage = async () => {
   // Query the last normal message
-  const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
+  const maxMessageIdQuery =
+    'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
   const query = `
-    SELECT ROWID, ${includedColumns.join(', ')}
+    SELECT ROWID, Identifier, ${includedColumns.join(', ')}
     FROM ${tableName}
     WHERE Id >= (${maxMessageIdQuery})
   `;
 
-  db.get(query, [], async (err, row) => {
-    if (err) {
-      console.error('Error retrieving last normal message:', err);
-    } else if (row) {
-      // Get information about the device from TableDevise
-      const deviceInfo = await getDeviceInfo(row.Identifier);
-
-      const columnNames = await getColumnNames(tableName);
-
-      const includedColumns = columnNames.filter(
-        (column) => !excludedColumns.includes(column)
-      );
-
-      // Prepare the message with information about the device and other details
-      const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
-      const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
-
-      // Combine the header and body for the full message
-      const fullMessage = `${messageHeader}\n${messageBody}`;
-      await sendTelegramMessage(fullMessage);
-
-      console.log('Last normal message sent successfully.');
-    } else {
-      console.log('No last normal message to send.');
-    }
+  // Use a promise to get the result of the query
+  const lastNormalMessageResult = await new Promise((resolve, reject) => {
+    db.get(query, [], (err, result) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(result);
+      }
+    });
   });
+
+  console.log("lastNormalMessageResult:", lastNormalMessageResult);
+
+  if (lastNormalMessageResult) {
+    // Get information about the device from TableDevise
+    const deviceInfo = await getDeviceInfo(lastNormalMessageResult.Identifier);
+
+    // Prepare the message with information about the device and other details
+    const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+    const messageBody = includedColumns
+      .map(column => `${column}: ${lastNormalMessageResult[column]}`)
+      .join('\n');
+
+    // Combine the header and body for the full message
+    const fullMessage = `${messageHeader}\n${messageBody}`;
+    await sendTelegramMessage(fullMessage);
+
+    console.log('Last normal message sent successfully.');
+  } else {
+    console.log('No last normal message to send.');
+  }
 };
 
 watchForNewCensorRecords((newCensorRecords) => {
