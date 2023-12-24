@@ -9,25 +9,11 @@ dotenv.config();
 const tableName = process.env.TABLE_NAME;
 const intervalTime = process.env.INTERVAL_TIME;
 const excludedColumns = process.env.EXCLUDED_COLUMNS.split(",");
-
 let lastAlertSentTime = null;
 
-const insertEventRecord = (
-  messageId,
-  censorId,
-  censor_time,
-  successful,
-  message_sent
-) => {
-  const insertQuery =
-    "INSERT INTO Events (message_id, censor_id, censor_time, successful, message_sent) VALUES (?, ?, ?, ?, ?)";
-  const values = [
-    messageId,
-    censorId,
-    censor_time,
-    successful ? 1 : 0,
-    message_sent,
-  ];
+const insertEventRecord = (messageId, censorId, censor_time, successful, message_sent) => {
+  const insertQuery = "INSERT INTO Events (message_id, censor_id, censor_time, successful, message_sent) VALUES (?, ?, ?, ?, ?)";
+  const values = [messageId, censorId, censor_time, successful ? 1 : 0, message_sent];
 
   db.run(insertQuery, values, function (err) {
     if (err) {
@@ -51,27 +37,40 @@ const getDeviceInfo = async (Identifier) => {
   });
 };
 
-const sendColumnValuesToTelegram = async (
-  tableName,
-  excludedColumns,
-  rowId,
-  callback
-) => {
+const getColumnNamesAndFilter = async (tableName, excludedColumns) => {
+  const columnNames = await getColumnNames(tableName);
+
+  if (!columnNames.length) {
+    throw new Error("No columns found for the specified table.");
+  }
+
+  const includedColumns = columnNames.filter(
+    (column) => !excludedColumns.includes(column)
+  );
+
+  return includedColumns;
+};
+
+const sendAlertMessage = async (deviceInfo, includedColumns, row) => {
+  const messageHeader = `⚠️<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+  const messageBody = includedColumns.map(column => `${column}: ${row[column]}`).join('\n');
+  const fullMessage = `${messageHeader}\n${messageBody}`;
+
+  await sendTelegramMessage(fullMessage);
+
+  console.log("Alert message sent successfully.");
+};
+
+const sendColumnValuesToTelegram = async (tableName, excludedColumns, rowId, callback) => {
   try {
-    const columnNames = await getColumnNames(tableName);
-
-    if (!columnNames.length) {
-      throw new Error("No columns found for the specified table.");
-    }
-
-    const includedColumns = columnNames.filter(
-      (column) => !excludedColumns.includes(column)
+    
+    const includedColumns = await getColumnNamesAndFilter(
+      tableName,
+      excludedColumns
     );
 
-    const maxMessageIdQuery =
-      "SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0";
+    const maxMessageIdQuery = "SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0";
 
-    // Use a promise to get the result of the query
     const maxMessageIdResult = await new Promise((resolve, reject) => {
       db.get(maxMessageIdQuery, [], (err, result) => {
         if (err) {
@@ -85,74 +84,53 @@ const sendColumnValuesToTelegram = async (
     console.log("maxMessageIdResult:", maxMessageIdResult);
 
     const query = `
-      SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(
-        ", "
-      )}
+      SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(', ')}
       FROM ${tableName}
       WHERE Id >= (${maxMessageIdQuery})
     `;
 
-    // Check for new rows every 5 minutes
-    setInterval(async () => {
-      const query = `
-        SELECT ROWID, Identifier, SensorError, BitError, ${includedColumns.join(', ')}
-        FROM ${tableName}
-        WHERE Id >= (${maxMessageIdQuery})
-      `;
-    
-      db.get(query, [], async (err, row) => {
-        if (err) {
-          console.error('Error retrieving row:', err);
-        } else if (row) {
-          const deviceInfo = await getDeviceInfo(row.Identifier);
-          const deviceError = Boolean(row.SensorError || row.BitError);
-    
-          console.log("deviceInfo", deviceError);
-    
-          if (deviceError) {
-            lastAlertSentTime = new Date(); // Update last alert sent time
-            const messageHeader = `⚠️<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
-            const messageBody = includedColumns
-              .map(column => `${column}: ${row[column]}`)
-              .join('\n');
-            const fullMessage = `${messageHeader}\n${messageBody}`;
-    
-            await sendTelegramMessage(fullMessage);
-    
-            console.log("Message sent successfully.");
-            callback(rowId);
-          } else {
-            console.log("No alert rows to send.");
-          }
+    console.log("Checking for new rows...");
+
+    db.get(query, [], async (err, row) => {
+      if (err) {
+        console.error('Error retrieving row:', err);
+      } else if (row) {
+        console.log("New row found:", row);
+        const deviceInfo = await getDeviceInfo(row.Identifier);
+        const deviceError = Boolean(row.SensorError || row.BitError);
+
+        console.log("deviceInfo", deviceError);
+
+        if (deviceError) {
+          lastAlertSentTime = new Date();
+          await sendAlertMessage(deviceInfo, includedColumns, row);
+          callback(rowId);
         } else {
-          console.log("No new rows to send.");
-    
-          // Check if 3 hours have passed since the last alert
-          if (lastAlertSentTime && new Date() - lastAlertSentTime >= intervalTime * 60 * 60 * 1000) {
-            console.log("Sending last normal message after 3 hours.");
-            // Send the last normal message
-            sendLastNormalMessage();
-            lastAlertSentTime = null; // Reset last alert sent time
-          }
+          console.log("No alert rows to send.");
         }
-      });
-    }, intervalTime * 60 * 1000); // Convert interval time to milliseconds
+      } else {
+        console.log("No new rows to send.");
+
+        if (lastAlertSentTime && new Date() - lastAlertSentTime >= intervalTime * 60 * 60 * 1000) {
+          console.log("Sending last normal message after 3 hours.");
+          sendLastNormalMessage();
+          lastAlertSentTime = null;
+        }
+      }
+    });
   } catch (error) {
     console.error("Error sending column values to Telegram:", error);
   }
 };
 
 const sendLastNormalMessage = async () => {
-  // Query the last normal message
-  const maxMessageIdQuery =
-    'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
+  const maxMessageIdQuery = 'SELECT MAX(message_id) AS max_message_id FROM events WHERE message_sent = 0';
   const query = `
     SELECT ROWID, Identifier, ${includedColumns.join(', ')}
     FROM ${tableName}
     WHERE Id >= (${maxMessageIdQuery})
   `;
 
-  // Use a promise to get the result of the query
   const lastNormalMessageResult = await new Promise((resolve, reject) => {
     db.get(query, [], (err, result) => {
       if (err) {
@@ -166,16 +144,16 @@ const sendLastNormalMessage = async () => {
   console.log("lastNormalMessageResult:", lastNormalMessageResult);
 
   if (lastNormalMessageResult) {
-    // Get information about the device from TableDevise
     const deviceInfo = await getDeviceInfo(lastNormalMessageResult.Identifier);
 
-    // Prepare the message with information about the device and other details
-    const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
-    const messageBody = includedColumns
-      .map(column => `${column}: ${lastNormalMessageResult[column]}`)
-      .join('\n');
+    const includedColumns = await getColumnNamesAndFilter(
+      tableName,
+      excludedColumns
+    );    
 
-    // Combine the header and body for the full message
+    const messageHeader = `<b>Device: ${deviceInfo.Name}, Address: ${deviceInfo.Addres}</b>`;
+    const messageBody = includedColumns.map(column => `${column}: ${lastNormalMessageResult[column]}`).join('\n');
+
     const fullMessage = `${messageHeader}\n${messageBody}`;
     await sendTelegramMessage(fullMessage);
 
@@ -185,50 +163,59 @@ const sendLastNormalMessage = async () => {
   }
 };
 
-watchForNewCensorRecords((newCensorRecords) => {
-  newCensorRecords.forEach((censorRecord) => {
+watchForNewCensorRecords(async (newCensorRecords) => {
+  for (const censorRecord of newCensorRecords) {
     const rowId = censorRecord.Id;
     const censorId = censorRecord.Identifier;
     const censorTime = censorRecord.TimerOut;
     const successful = true;
     const messageSent = 0;
 
-    const eventExistsQuery =
-      "SELECT COUNT(*) AS count FROM Events WHERE message_id = ?";
-    db.get(eventExistsQuery, [rowId], (err, result) => {
-      if (err) {
-        console.error("Error checking for existing event:", err.message);
-        return;
-      }
+    try {
+      // Check if the event already exists
+      const eventExistsQuery =
+        "SELECT COUNT(*) AS count FROM Events WHERE message_id = ?";
+      const eventExistsResult = await new Promise((resolve, reject) => {
+        db.get(eventExistsQuery, [rowId], (err, result) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(result);
+          }
+        });
+      });
 
-      const eventExists = result.count > 0;
-      console.log("eventExists", eventExists, rowId);
+      const eventExists = eventExistsResult.count > 0;
 
       if (!eventExists) {
+        // Insert the event record
         insertEventRecord(rowId, censorId, censorTime, successful, messageSent);
-        console.log(`Event with rowId ${rowId} not exists.`);
-        sendColumnValuesToTelegram(tableName, excludedColumns, rowId, () => {
+        console.log(`Event with rowId ${rowId} does not exist. Inserted event record.`);
+
+        // Send the column values to Telegram
+        await sendColumnValuesToTelegram(tableName, excludedColumns, rowId, async () => {
+          // Update the event message_sent flag
           updateEventMessageSentFlag(rowId);
+          console.log(`Event with rowId ${rowId} processed successfully.`);
         });
       } else {
-        // console.log(`Event with rowId ${rowId} already exists. Skipping message sending.`);
+        console.log(`Event with rowId ${rowId} already exists. Skipping message sending.`);
       }
-    });
-  });
+    } catch (error) {
+      console.error("Error processing new censor record:", error);
+    }
+  }
 });
 
-const updateEventMessageSentFlag = (parentId) => {
-  console.log("======", parentId);
+
+const updateEventMessageSentFlag = parentId => {
+  console.log("Updating event record:", parentId);
   const updateQuery = "UPDATE Events SET message_sent = 1 WHERE message_id = ?";
   db.run(updateQuery, [parentId], function (err) {
     if (err) {
       console.error("Error updating event record:", err.message);
     } else {
-      console.log(
-        "Updated event record with ID:",
-        parentId,
-        "message_sent set to 1"
-      );
+      console.log("Updated event record with ID:", parentId, "message_sent set to 1");
     }
   });
 };
