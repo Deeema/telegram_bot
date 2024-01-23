@@ -4,6 +4,7 @@
   "description": "telegram bot for censors",
   "main": "index.js",
   "scripts": {
+    "start": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -15,7 +16,9 @@
   "dependencies": {
     "dotenv": "^16.3.1",
     "node-cron": "^3.0.2",
+    "node-fetch": "^3.3.2",
     "node-telegram-bot-api": "^0.63.0",
+    "sqlite3": "^5.1.6",
     "telegraf": "^4.13.1",
     "telegraf-session-local": "^2.1.1"
   }
