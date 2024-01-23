@@ -24,7 +24,8 @@ const insertEventRecord = (messageId, censorId, censor_time, successful, message
   });
 };
 
-const getDeviceInfo = async (Identifier) => {
+export const getDeviceInfo = async (Identifier) => {
+  console.log('getDeviceInfo', Identifier);
   const query = "SELECT Name, Addres FROM TableDevise WHERE Identifier = ?";
   return new Promise((resolve, reject) => {
     db.get(query, [Identifier], (err, row) => {
@@ -37,7 +38,7 @@ const getDeviceInfo = async (Identifier) => {
   });
 };
 
-const getColumnNamesAndFilter = async (tableName, excludedColumns) => {
+export const getColumnNamesAndFilter = async (tableName, excludedColumns) => {
   const columnNames = await getColumnNames(tableName);
 
   if (!columnNames.length) {

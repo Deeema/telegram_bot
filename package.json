@@ -5,13 +5,18 @@
   "main": "index.js",
   "scripts": {
     "start": "node app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "mocha --require @babel/register"
   },
   "author": "",
   "license": "ISC",
   "type": "module",
   "devDependencies": {
-    "eslint": "^8.48.0"
+    "@babel/core": "^7.23.7",
+    "@babel/preset-env": "^7.23.8",
+    "@babel/register": "^7.23.7",
+    "chai": "^5.0.0",
+    "eslint": "^8.48.0",
+    "mocha": "^10.2.0"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
