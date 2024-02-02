@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "scripts": {
       "start": "npm run init && node app.js",
-      "init": "node init.js", 
+      "init": "node initdb.js", 
       "test": "mocha --require @babel/register"
     },
   "author": "",
