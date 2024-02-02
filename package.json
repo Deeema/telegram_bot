@@ -1,12 +1,11 @@
 {
-  "name": "telegram-bot",
-  "version": "1.0.0",
-  "description": "telegram bot for censors",
-  "main": "index.js",
-  "scripts": {
-    "start": "node app.js",
-    "test": "mocha --require @babel/register"
-  },
+    "name": "your-project",
+    "version": "1.0.0",
+    "scripts": {
+      "start": "npm run init && node app.js",
+      "init": "node init.js", 
+      "test": "mocha --require @babel/register"
+    },
   "author": "",
   "license": "ISC",
   "type": "module",
